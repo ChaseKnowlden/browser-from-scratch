@@ -4,20 +4,38 @@ import ssl
 class URL:
     def __init__(self, url):
         self.scheme, url = url.split("://", 1)
-        assert self.scheme in ["http", "https"]
-        if "/" not in url:
-            url = url + "/"
-        self.host, url = url.split("/", 1)
-        self.path = "/" + url
-        if self.scheme == "http":
-            self.port = 80
-        elif self.scheme == "https":
-            self.port = 443
-        if ":" in self.host:
-            self.host, port = self.host.split(":", 1)
-            self.port = int(port)
+        assert self.scheme in ["http", "https", "file"]
+        if self.scheme == "file":
+            # file:///path/to/file or file://localhost/path/to/file
+            if url.startswith("/"):
+                self.path = url
+            elif url.startswith("localhost/"):
+                self.path = "/" + url[len("localhost/"):]
+            else:
+                self.path = "/" + url
+            self.host = None
+            self.port = None
+        else:
+            if "/" not in url:
+                url = url + "/"
+            self.host, url = url.split("/", 1)
+            self.path = "/" + url
+            if self.scheme == "http":
+                self.port = 80
+            elif self.scheme == "https":
+                self.port = 443
+            if ":" in self.host:
+                self.host, port = self.host.split(":", 1)
+                self.port = int(port)
 
     def request(self):
+        if self.scheme == "file":
+            try:
+                with open(self.path, "r", encoding="utf8") as f:
+                    return f.read()
+            except Exception as e:
+                return f"<html><body><h1>File error</h1><p>{e}</p></body></html>"
+        # ...existing code for http/https...
         s = socket.socket(
             family=socket.AF_INET,
             type=socket.SOCK_STREAM,
@@ -30,6 +48,7 @@ class URL:
         request = "GET {} HTTP/1.0\r\n".format(self.path)
         request += "Host: {}\r\n".format(self.host)
         request += "Connection: close\r\n"
+        request += "User-Agent: browser-engineering/0.1\r\n"
         request += "\r\n"
         s.send(request.encode("utf8"))
         response = s.makefile("r", encoding="utf8", newline="\r\n")
